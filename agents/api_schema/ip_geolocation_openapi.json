@@ -1,0 +1,76 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "IP Geolocation API",
+    "description": "IP address geolocation lookup via ipapi.co. Keyless but requires a non-empty User-Agent header.",
+    "version": "1.0.0"
+  },
+  "components": {
+    "securitySchemes": {
+      "userAgentHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "User-Agent",
+        "description": "ipapi.co is keyless but requires a non-empty User-Agent header on every request. The AgentCore Gateway target for this service is configured with 'AgentCore-Gateway/1.0' as the User-Agent value."
+      }
+    }
+  },
+  "security": [
+    { "userAgentHeader": [] }
+  ],
+  "servers": [
+    {
+      "url": "https://ipapi.co",
+      "description": "ipapi.co geolocation service"
+    }
+  ],
+  "paths": {
+    "/{ip}/json": {
+      "get": {
+        "operationId": "lookupIP",
+        "summary": "Look up geographic location for an IP address",
+        "description": "Returns city, region, country, latitude, and longitude for the given IP address.",
+        "security": [
+          { "userAgentHeader": [] }
+        ],
+        "parameters": [
+          {
+            "name": "ip",
+            "in": "path",
+            "required": true,
+            "description": "The IP address to look up",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful geolocation response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ip": { "type": "string" },
+                    "city": { "type": "string" },
+                    "region": { "type": "string" },
+                    "country": { "type": "string" },
+                    "country_name": { "type": "string" },
+                    "latitude": { "type": "number" },
+                    "longitude": { "type": "number" },
+                    "timezone": { "type": "string" },
+                    "org": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        }
+      }
+    }
+  }
+}

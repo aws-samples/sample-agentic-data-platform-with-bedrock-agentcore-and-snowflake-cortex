@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["agents*"]
+
+[project]
+name = "fraud-detection-agent"
+version = "0.1.0"
+description = "Fraud Detection Agent built on Amazon Bedrock AgentCore"
+license = "MIT-0"
+requires-python = ">=3.11"
+# Runtime dependencies — these are what AgentCore installs into the deployed
+# container. Keep this list minimal to what agent.py imports at request time.
+dependencies = [
+    "strands-agents>=1.28.0",
+    "strands-agents-tools>=0.5.1",
+    "bedrock-agentcore>=1.4.0",
+    "requests>=2.33.0",
+    "python-dotenv>=1.2.2",
+]
+
+# Local-only dependencies — deployment toolkit and UI. These are NOT shipped
+# to AgentCore Runtime. Install with: pip install -e ".[dev]"
+[project.optional-dependencies]
+dev = [
+    "bedrock-agentcore-starter-toolkit>=0.3.0",
+    "streamlit>=1.30",
+    "pyyaml>=6.0",
+]

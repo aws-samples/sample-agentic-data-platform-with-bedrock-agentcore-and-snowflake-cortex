@@ -1,0 +1,542 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Snowflake Cortex Agents API",
+    "description": "Production API for Snowflake Cortex Agents, which orchestrate across both structured and unstructured data sources to deliver insights.",
+    "version": "2.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://{account_url}/api/v2",
+      "description": "Snowflake account-specific API endpoint",
+      "variables": {
+        "account_url": {
+          "description": "Your Snowflake account URL (e.g., myaccount.snowflakecomputing.com)",
+          "default": "myaccount.snowflakecomputing.com"
+        }
+      }
+    }
+  ],
+  "paths": {
+    "/databases/{database}/schemas/{schema}/agents/{agent}:run": {
+      "post": {
+        "operationId": "runAgent",
+        "summary": "Run a Cortex Agent (Agent object)",
+        "description": "Runs an existing Cortex Agent object and streams results.",
+        "parameters": [
+          {
+            "name": "database",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "schema",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/AcceptHeader"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "messages"
+                ],
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "description": "Optional override of agent model"
+                  },
+                  "response_instruction": {
+                    "type": "string"
+                  },
+                  "messages": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "role",
+                        "content"
+                      ],
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "system",
+                            "user",
+                            "assistant"
+                          ]
+                        },
+                        "content": {
+                          "oneOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "array",
+                              "maxItems": 20,
+                              "items": {
+                                "type": "object",
+                                "required": [
+                                  "type"
+                                ],
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "text",
+                                      "image"
+                                    ]
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  },
+                                  "image_url": {
+                                    "type": "object",
+                                    "properties": {
+                                      "url": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "4XX": {
+            "description": "Client error"
+          },
+          "5XX": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/cortex/agent:run": {
+      "post": {
+        "operationId": "runCortexAgent",
+        "summary": "Run a Cortex Agent",
+        "description": "Executes a Cortex Agent that can orchestrate across structured and unstructured data sources.",
+        "parameters": [
+          {
+            "name": "Accept",
+            "in": "header",
+            "description": "The format of the response",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "default": "application/json"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "model",
+                  "messages"
+                ],
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "description": "The LLM model to use for generating responses",
+                    "enum": [
+                      "claude-sonnet-4-5",
+                      "claude-3-5-sonnet",
+                      "claude-3-7-sonnet",
+                      "mistral-large2",
+                      "llama3.1-405b",
+                      "llama3.1-70b",
+                      "reka-core",
+                      "deepseek-r1"
+                    ],
+                    "example": "claude-sonnet-4-5"
+                  },
+                  "messages": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "description": "The conversation history",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "role",
+                        "content"
+                      ],
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "system",
+                            "user",
+                            "assistant"
+                          ],
+                          "description": "The role of the message sender"
+                        },
+                        "content": {
+                          "oneOf": [
+                            {
+                              "type": "string",
+                              "description": "Simple text content"
+                            },
+                            {
+                              "type": "array",
+                              "description": "Multi-modal content",
+                              "items": {
+                                "type": "object",
+                                "required": [
+                                  "type"
+                                ],
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "text",
+                                      "image"
+                                    ]
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  },
+                                  "image_url": {
+                                    "type": "object",
+                                    "properties": {
+                                      "url": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "maxItems": 50
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "tools": {
+                    "type": "array",
+                    "description": "The tools available to the agent",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "tool_spec"
+                      ],
+                      "properties": {
+                        "tool_spec": {
+                          "type": "object",
+                          "required": [
+                            "type",
+                            "name"
+                          ],
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "cortex_search",
+                                "cortex_analyst_text_to_sql",
+                                "sql_exec",
+                                "data_to_chart"
+                              ]
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "maxItems": 50
+                  },
+                  "tool_resources": {
+                    "type": "object",
+                    "description": "Resources for the tools",
+                    "additionalProperties": true
+                  },
+                  "response_instruction": {
+                    "type": "string",
+                    "description": "Optional instruction to customize the agent's responses"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response with streaming content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "Unique identifier for the response"
+                    },
+                    "object": {
+                      "type": "string",
+                      "description": "Type of object returned"
+                    },
+                    "created": {
+                      "type": "integer",
+                      "description": "Unix timestamp for when the response was created"
+                    },
+                    "model": {
+                      "type": "string",
+                      "description": "Model used for the response"
+                    },
+                    "choices": {
+                      "type": "array",
+                      "description": "Array of completion choices",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "index": {
+                            "type": "integer"
+                          },
+                          "message": {
+                            "type": "object",
+                            "properties": {
+                              "role": {
+                                "type": "string"
+                              },
+                              "content": {
+                                "type": "string"
+                              },
+                              "tool_calls": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "type": {
+                                      "type": "string"
+                                    },
+                                    "function": {
+                                      "type": "object",
+                                      "properties": {
+                                        "name": {
+                                          "type": "string"
+                                        },
+                                        "arguments": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "maxItems": 50
+                              }
+                            }
+                          },
+                          "finish_reason": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "maxItems": 50
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "prompt_tokens": {
+                          "type": "integer"
+                        },
+                        "completion_tokens": {
+                          "type": "integer"
+                        },
+                        "total_tokens": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Snowflake REST APIs support authentication via programmatic access tokens (PATs). Include your PAT token in the Authorization header as 'Bearer YOUR_PAT_TOKEN'."
+      }
+    },
+    "parameters": {
+      "AcceptHeader": {
+        "name": "Accept",
+        "in": "header",
+        "description": "The format of the response",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "default": "application/json"
+        }
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ]
+}

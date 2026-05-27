@@ -1,0 +1,144 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Amazon SNS topic for Fraud Detection Agent email notifications. Provisions an SNS topic with an email subscription and an IAM managed policy granting Publish permissions scoped to the topic.
+
+Conditions:
+  HasCustomPolicyName: !Not [!Equals [!Ref ManagedPolicyName, '']]
+
+Parameters:
+  AnalystEmail:
+    Type: String
+    Description: Analyst email address to subscribe to the fraud alerts topic. SNS will send a confirmation email; the analyst must click the link to confirm before receiving notifications.
+    AllowedPattern: '^[^\s@]+@[^\s@]+\.[^\s@]+'
+    ConstraintDescription: Must be a valid email address.
+
+  TopicName:
+    Type: String
+    Default: fraud-detection-alerts
+    Description: Name of the SNS topic.
+
+  ManagedPolicyName:
+    Type: String
+    Default: ''
+    Description: Name of the IAM managed policy to attach to the AgentCore runtime role. Leave blank (default) to auto-generate a unique name from the stack name and account ID, which prevents AlreadyExists errors on re-deployment.
+
+Resources:
+
+  # ------------------------------------------------------------------
+  # SNS Topic
+  # ------------------------------------------------------------------
+  FraudAlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Ref TopicName
+      DisplayName: Fraud Alerts
+      KmsMasterKeyId: alias/aws/sns
+
+  # ------------------------------------------------------------------
+  # Topic Policy — deny non-TLS publishers (checkov CKV_AWS_26
+  # covers at-rest encryption via KmsMasterKeyId above; this policy
+  # covers in-transit encryption per cdk-nag AwsSolutions-SNS3).
+  # ------------------------------------------------------------------
+  FraudAlertsTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref FraudAlertsTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyNonTLSPublishers
+            Effect: Deny
+            Principal: '*'
+            Action: sns:Publish
+            Resource: !Ref FraudAlertsTopic
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+
+  # ------------------------------------------------------------------
+  # Email Subscription
+  # ------------------------------------------------------------------
+  AnalystEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref FraudAlertsTopic
+      Protocol: email
+      Endpoint: !Ref AnalystEmail
+
+  # ------------------------------------------------------------------
+  # IAM Managed Policy — attach to the AgentCore runtime role.
+  # The policy name includes the account ID so re-deploying the stack
+  # (or deploying to a different account) never collides with an orphaned
+  # policy left behind by a previous failed/deleted stack.
+  # ------------------------------------------------------------------
+  SNSPublishPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      ManagedPolicyName: !If
+        - HasCustomPolicyName
+        - !Ref ManagedPolicyName
+        - !Sub '${AWS::StackName}-SNSPublishPolicy-${AWS::AccountId}'
+      Description: Allows the Fraud Detection Agent to publish messages to the fraud alerts SNS topic.
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowPublishToFraudAlertsTopic
+            Effect: Allow
+            Action:
+              - sns:Publish
+            Resource: !Ref FraudAlertsTopic
+
+  # ------------------------------------------------------------------
+  # CloudWatch Alarm — detects failed deliveries on the topic.
+  #
+  # SNS emits NumberOfNotificationsFailed at topic granularity. For the
+  # email protocol this captures unconfirmed subscriptions, bounces, and
+  # internal delivery errors, none of which are observable through
+  # DeliveryStatusLogging (email is not a supported protocol for that
+  # mechanism — only http/s, sqs, lambda, firehose, application are).
+  #
+  # No AlarmActions are configured by default. To get paged, attach an
+  # ops SNS topic via `aws cloudwatch put-metric-alarm --alarm-actions ...`
+  # or the CloudWatch console. Do NOT wire the alarm back into
+  # FraudAlertsTopic — if that topic is the one failing, the alarm
+  # notification would fail for the same reason.
+  # ------------------------------------------------------------------
+  FailedDeliveryAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-NotificationsFailed'
+      AlarmDescription: Fires when SNS reports one or more failed deliveries from the fraud alerts topic over a 5-minute window. Common causes are the analyst email subscription is still in PendingConfirmation, the endpoint is bouncing, or the topic is being throttled.
+      Namespace: AWS/SNS
+      MetricName: NumberOfNotificationsFailed
+      Dimensions:
+        - Name: TopicName
+          Value: !GetAtt FraudAlertsTopic.TopicName
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+Outputs:
+  TopicArn:
+    Description: ARN of the fraud alerts SNS topic (set as SNS_TOPIC_ARN).
+    Value: !Ref FraudAlertsTopic
+    Export:
+      Name: !Sub '${AWS::StackName}-TopicArn'
+
+  TopicName:
+    Description: Name of the fraud alerts SNS topic.
+    Value: !GetAtt FraudAlertsTopic.TopicName
+
+  SubscribedEmail:
+    Description: Analyst email subscribed to the topic (must be confirmed).
+    Value: !Ref AnalystEmail
+
+  SNSPublishPolicyArn:
+    Description: Attach this managed policy to the AgentCore runtime execution role via aws iam attach-role-policy.
+    Value: !Ref SNSPublishPolicy
+    Export:
+      Name: !Sub '${AWS::StackName}-SNSPublishPolicyArn'

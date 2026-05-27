@@ -1,0 +1,110 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Optional Amazon Bedrock Guardrail for the Fraud Detection Agent. Deploy this stack
+  to wire Bedrock Guardrails into the agent for any shared or non-demo use.
+  Export the two outputs (GuardrailId, GuardrailVersion) into .env as
+  BEDROCK_GUARDRAIL_ID and BEDROCK_GUARDRAIL_VERSION; the agent reads both
+  env vars at startup. If either is unset, the agent runs without guardrails.
+
+Parameters:
+  GuardrailName:
+    Type: String
+    Default: fraud-detection-guardrail
+    Description: Name of the Amazon Bedrock Guardrail resource.
+
+  BlockedInputMessage:
+    Type: String
+    Default: >-
+      I can't help with that request. Try rephrasing, or contact the fraud
+      team directly if you believe this block is in error.
+    Description: Message returned to the caller when user input is blocked.
+
+  BlockedOutputMessage:
+    Type: String
+    Default: >-
+      I can't include that information in my response. Try a narrower
+      investigation query, or consult the raw Snowflake view directly.
+    Description: Message returned to the caller when model output is blocked.
+
+Resources:
+
+  # ------------------------------------------------------------------
+  # Amazon Bedrock Guardrail
+  #
+  # Content filters: blocks hate/insults/sexual/violence/misconduct in
+  # both input and output at HIGH strength. Prompt attack filter on input
+  # at HIGH strength to defend against prompt injection targeting the
+  # SNS email side channel.
+  #
+  # PII policy: ANONYMIZE (not BLOCK) because the agent legitimately
+  # handles customer names, emails, phone numbers, and addresses during
+  # fraud investigation. Credit card numbers are also anonymized so they
+  # do not appear in investigation reports.
+  # ------------------------------------------------------------------
+  FraudDetectionGuardrail:
+    Type: AWS::Bedrock::Guardrail
+    Properties:
+      Name: !Ref GuardrailName
+      Description: Content filtering and PII anonymization for the Fraud Detection Agent
+      BlockedInputMessaging: !Ref BlockedInputMessage
+      BlockedOutputsMessaging: !Ref BlockedOutputMessage
+      ContentPolicyConfig:
+        FiltersConfig:
+          - Type: HATE
+            InputStrength: HIGH
+            OutputStrength: HIGH
+          - Type: INSULTS
+            InputStrength: HIGH
+            OutputStrength: HIGH
+          - Type: SEXUAL
+            InputStrength: HIGH
+            OutputStrength: HIGH
+          - Type: VIOLENCE
+            InputStrength: HIGH
+            OutputStrength: HIGH
+          - Type: MISCONDUCT
+            InputStrength: HIGH
+            OutputStrength: HIGH
+          - Type: PROMPT_ATTACK
+            InputStrength: HIGH
+            # PROMPT_ATTACK output strength must be NONE per service contract.
+            OutputStrength: NONE
+      SensitiveInformationPolicyConfig:
+        PiiEntitiesConfig:
+          - Type: NAME
+            Action: ANONYMIZE
+          - Type: EMAIL
+            Action: ANONYMIZE
+          - Type: PHONE
+            Action: ANONYMIZE
+          - Type: ADDRESS
+            Action: ANONYMIZE
+          - Type: AGE
+            Action: ANONYMIZE
+          - Type: CREDIT_DEBIT_CARD_NUMBER
+            Action: ANONYMIZE
+
+  # ------------------------------------------------------------------
+  # Published Guardrail Version — provides a stable numeric version for
+  # the agent to reference via BEDROCK_GUARDRAIL_VERSION. Updating the
+  # guardrail in place requires publishing a new version via the console
+  # or CLI and updating the env var.
+  # ------------------------------------------------------------------
+  FraudDetectionGuardrailVersion:
+    Type: AWS::Bedrock::GuardrailVersion
+    Properties:
+      GuardrailIdentifier: !Ref FraudDetectionGuardrail
+      Description: Initial published version for the fraud-detection agent.
+
+Outputs:
+  GuardrailId:
+    Description: Export this as BEDROCK_GUARDRAIL_ID in the agent environment.
+    Value: !Ref FraudDetectionGuardrail
+    Export:
+      Name: !Sub '${AWS::StackName}-GuardrailId'
+
+  GuardrailVersion:
+    Description: Export this as BEDROCK_GUARDRAIL_VERSION in the agent environment.
+    Value: !GetAtt FraudDetectionGuardrailVersion.Version
+    Export:
+      Name: !Sub '${AWS::StackName}-GuardrailVersion'
