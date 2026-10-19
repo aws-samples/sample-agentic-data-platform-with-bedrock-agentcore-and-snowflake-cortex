@@ -38,6 +38,7 @@ security-review/
 
 # AI coding assistant state
 .claude/
+.agents/
 
 # Python project build/editable install artifacts
 fraud_detection_agent.egg-info/
@@ -69,7 +70,15 @@ node_modules/
 .idea/
 .kiro
 
+# draw.io autosave backups
+.$*.drawio.bkp
+
 # Snowflake DB (local sim artifact, just in case)
 *.db
 
 
+
+# Lambda build artifacts
+webapp/ws-backend/ws-function.zip
+email-forwarder/fn.zip
+webapp/ws-backend/node_modules/

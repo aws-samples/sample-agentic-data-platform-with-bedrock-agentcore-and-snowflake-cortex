@@ -1,18 +1,20 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: MIT-0
-"""Optional Bedrock Guardrails wiring for the fraud-detection agent.
+"""Bedrock Guardrails wiring for the fraud-detection agent. Required by default.
 
 In Strands, Guardrails are applied at the BedrockModel level (not the Agent
 level). This module exposes a single helper that builds a BedrockModel with
-Guardrails attached if the two Guardrail env vars are set, and a bare
-BedrockModel (no guardrails) otherwise.
+Guardrails attached.
 
 Environment variables:
-    BEDROCK_GUARDRAIL_ID       — The Amazon Bedrock Guardrail ID
-    BEDROCK_GUARDRAIL_VERSION  — The published Guardrail version number
+    BEDROCK_GUARDRAIL_ID       — The Amazon Bedrock Guardrail ID (required)
+    BEDROCK_GUARDRAIL_VERSION  — The published Guardrail version (required)
+    ALLOW_NO_GUARDRAILS        — Set to "true" to run without guardrails
 
-If either is unset, the model is built without guardrail kwargs and the agent
-behaves exactly as it did before this module was introduced.
+Guardrails are FAIL CLOSED: if the two ids are unset, model construction raises
+rather than silently dropping content filtering and PII masking. Running without
+them requires the explicit ALLOW_NO_GUARDRAILS=true opt-out, which logs a
+warning on every process start.
 """
 
 import logging
@@ -46,11 +48,22 @@ def _guardrail_kwargs() -> dict:
             _guardrail_log_emitted = True
         return {"guardrail_id": gid, "guardrail_version": gver}
 
+    # Fail closed: guardrails are required by default. Running a fraud-investigation
+    # agent with no content filtering and no PII masking must be an explicit,
+    # named decision, not the consequence of an unset variable.
+    if os.environ.get("ALLOW_NO_GUARDRAILS", "").strip().lower() != "true":
+        raise RuntimeError(
+            "Amazon Bedrock Guardrails are required but not configured. Set "
+            "BEDROCK_GUARDRAIL_ID and BEDROCK_GUARDRAIL_VERSION (see README "
+            "'Guardrails setup'), or set ALLOW_NO_GUARDRAILS=true to run "
+            "deliberately without them."
+        )
+
     if not _guardrail_log_emitted:
-        logger.info(
-            "[fraud-agent] Amazon Bedrock Guardrails: DISABLED "
-            "(BEDROCK_GUARDRAIL_ID / BEDROCK_GUARDRAIL_VERSION unset — see "
-            "README 'Optional: Enable Amazon Bedrock Guardrails')"
+        logger.warning(
+            "[fraud-agent] Amazon Bedrock Guardrails: DISABLED via "
+            "ALLOW_NO_GUARDRAILS=true — no content filtering and no PII "
+            "masking is applied to any model call."
         )
         _guardrail_log_emitted = True
     return {}

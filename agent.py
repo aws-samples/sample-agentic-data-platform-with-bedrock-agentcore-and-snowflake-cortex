@@ -40,10 +40,9 @@ from strands.hooks.events import AfterToolCallEvent, BeforeToolCallEvent
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
 from agents.prompts.system_prompt import FRAUD_ANALYST_PROMPT
-from agents.tools.gateway_tools import query_snowflake, lookup_ip
+from agents.tools.gateway_tools import query_snowflake, lookup_ip, web_search
 from agents.tools.report_tools import write_report, send_report_notification
 from agents._guardrails import build_model
-from strands_tools.tavily import tavily_search
 
 load_dotenv()
 
@@ -372,6 +371,89 @@ def _messages_to_plain_text(content: Any) -> str:
     return str(content)
 
 
+# ---------- Optional AgentCore Memory ----------
+
+
+def _build_session_manager(payload: dict, context):
+    """Return an AgentCore Memory session manager if AGENTCORE_MEMORY_ID is set.
+
+    Off by default: when the env var is unset, the agent behaves exactly as before
+    (conversation history is supplied via ``messages``). To enable, create a Memory
+    resource in the account and set AGENTCORE_MEMORY_ID (and optionally
+    AGENTCORE_MEMORY_REGION). Requires the ``bedrock-agentcore[strands-agents]`` extra.
+    """
+    memory_id = os.environ.get("AGENTCORE_MEMORY_ID", "").strip()
+    if not memory_id:
+        return None
+    try:
+        from bedrock_agentcore.memory.integrations.strands.config import (
+            AgentCoreMemoryConfig,
+            RetrievalConfig,
+        )
+        from bedrock_agentcore.memory.integrations.strands.session_manager import (
+            AgentCoreMemorySessionManager,
+        )
+    except Exception:
+        logger.warning(
+            "AGENTCORE_MEMORY_ID is set but bedrock-agentcore[strands-agents] is not "
+            "installed; running without memory."
+        )
+        return None
+
+    import time
+
+    session_id = (
+        payload.get("session_id")
+        or getattr(context, "session_id", None)
+        or f"session-{int(time.time())}"
+    )
+    actor_id = payload.get("actor_id") or "analyst"
+
+    # AgentCore Memory requires actor_id / session_id to match
+    # [a-zA-Z0-9][a-zA-Z0-9-_/]*... — email-style actor ids (with '@' and '.')
+    # otherwise fail ListEvents/CreateEvent with a ValidationException.
+    def _mem_id(value: str, fallback: str) -> str:
+        cleaned = re.sub(r"[^a-zA-Z0-9_/-]", "-", str(value or "")).strip("-")
+        if not cleaned:
+            return fallback
+        if not cleaned[0].isalnum():
+            cleaned = f"a{cleaned}"
+        return cleaned[:200]
+
+    session_id = _mem_id(session_id, f"session-{int(time.time())}")
+    actor_id = _mem_id(actor_id, "analyst")
+    region = os.environ.get("AGENTCORE_MEMORY_REGION") or os.environ.get("AWS_REGION", "us-east-1")
+    # LTM retrieval: pull long-term records from the namespaces the memory was
+    # created with (SessionSummarizer / AnalystPreferences / FraudFacts) so
+    # cross-session summaries, analyst preferences, and fraud facts are injected
+    # into context — this is what makes it STM *and* LTM (not just STM).
+    try:
+        retrieval_config = {
+            "/summaries/{actorId}/{sessionId}": RetrievalConfig(top_k=3, relevance_score=0.3),
+            "/preferences/{actorId}": RetrievalConfig(top_k=5, relevance_score=0.4),
+            "/facts/{actorId}": RetrievalConfig(top_k=10, relevance_score=0.3),
+        }
+        cfg = AgentCoreMemoryConfig(
+            memory_id=memory_id,
+            session_id=str(session_id),
+            actor_id=str(actor_id),
+            retrieval_config=retrieval_config,
+        )
+        session_manager = AgentCoreMemorySessionManager(
+            agentcore_memory_config=cfg, region_name=region
+        )
+    except Exception as exc:
+        logger.warning(
+            "AGENTCORE_MEMORY_ID is set (%s) but the AgentCore Memory session "
+            "manager could not be built (%s); running without memory.",
+            memory_id,
+            exc,
+        )
+        return None
+    logger.info("AgentCore Memory ENABLED (memory %s, session %s, actor %s)", memory_id, session_id, actor_id)
+    return session_manager
+
+
 # ---------- Entrypoint ----------
 
 
@@ -387,13 +469,20 @@ async def invoke(payload, context):
     loop = asyncio.get_running_loop()
     trace_queue: asyncio.Queue = asyncio.Queue()
 
-    agent = Agent(
+    session_manager = _build_session_manager(payload, context)
+    agent_kwargs: dict[str, Any] = dict(
         model=build_model(MODEL_ID),
-        tools=[query_snowflake, lookup_ip, tavily_search, write_report, send_report_notification],
+        tools=[query_snowflake, lookup_ip, web_search, write_report, send_report_notification],
         system_prompt=FRAUD_ANALYST_PROMPT,
-        messages=history,
         hooks=[TraceHookProvider(trace_queue, loop)],
     )
+    if session_manager is not None:
+        # Memory manages conversation history across turns/sessions.
+        agent_kwargs["session_manager"] = session_manager
+    else:
+        # Default: history is supplied by the caller each turn.
+        agent_kwargs["messages"] = history
+    agent = Agent(**agent_kwargs)
 
     # Drive agent.stream_async in a background task so we can race it against
     # the trace queue and yield whichever arrives first.

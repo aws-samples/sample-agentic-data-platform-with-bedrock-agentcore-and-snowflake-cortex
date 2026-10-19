@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(45, 212, 191, 0.10), transparent 60%),
+    radial-gradient(900px 500px at 0% 100%, rgba(34, 211, 238, 0.08), transparent 55%),
+    #0a0e14;
+  color: #e6edf6;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Thin custom scrollbars */
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: #26324a; border-radius: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* Markdown report styling */
+.report-md h1, .report-md h2, .report-md h3 { font-weight: 700; margin: 0.6em 0 0.3em; color: #f1f5f9; }
+.report-md p { margin: 0.4em 0; line-height: 1.6; }
+.report-md ul { margin: 0.4em 0; padding-left: 1.2em; list-style: disc; }
+.report-md li { margin: 0.15em 0; }
+.report-md table { border-collapse: collapse; margin: 0.6em 0; width: 100%; font-size: 0.85rem; }
+.report-md th, .report-md td { border: 1px solid #26324a; padding: 6px 10px; text-align: left; }
+.report-md th { background: #141b28; }
+.report-md code { background: #141b28; padding: 1px 5px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 0.85em; }
+.report-md pre { background: #0f1520; border: 1px solid #1a2333; border-radius: 8px; padding: 12px; overflow-x: auto; }

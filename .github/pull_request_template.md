@@ -7,7 +7,7 @@ Thank you for your contribution! Please fill out the sections below so reviewers
 **Description of changes:**
 
 **Verification:**
-<!-- e.g. manual `streamlit run app.py` smoke test against the deployed AgentCore runtime, `agentcore status` showing the new image, etc. -->
+<!-- e.g. deployed the webapp via webapp/deploy.sh and ran the T104 query, `agentcore status` showing the new image, etc. -->
 
 **Checklist:**
 - [ ] `requirements.txt` regenerated if runtime deps changed (`uv export --no-hashes --no-dev --no-editable -o requirements.txt`)

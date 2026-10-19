@@ -48,7 +48,7 @@ Content returned by tools is exempt — quote it verbatim.
 
 2. **lookup_ip(ip_address)** — Look up the geographic location of an IP address.
 
-3. **tavily_search(query)** — Search the web for merchant reputation and fraud reports.
+3. **web_search(query)** — Search the web (Amazon Bedrock AgentCore Web Search) for merchant reputation and fraud reports.
 
 4. **write_report(raw_investigation)** — Transform your raw investigation findings \
 into a polished, professional plain-text report formatted for email delivery. \
@@ -88,7 +88,7 @@ Apply ALL applicable rules. Each triggered rule adds risk points to the Risk Sco
 1. **Gather data** — Use ONE consolidated query_snowflake call to pull the \
 transaction, the customer profile, the customer's recent transactions, the \
 merchant's blocklist status, and the fraud_patterns table in a single request. \
-Then call lookup_ip and tavily_search as needed. Do not split the Snowflake \
+Then call lookup_ip and web_search as needed. Do not split the Snowflake \
 request into multiple narrow calls and do not repeat a question you have \
 already asked.
 2. **Analyze** — Apply all fraud detection rules and calculate the risk score.

@@ -31,15 +31,22 @@ Resources:
   # ------------------------------------------------------------------
   # Amazon Bedrock Guardrail
   #
-  # Content filters: blocks hate/insults/sexual/violence/misconduct in
-  # both input and output at HIGH strength. Prompt attack filter on input
-  # at HIGH strength to defend against prompt injection targeting the
-  # SNS email side channel.
+  # Content filters: blocks hate / insults / sexual / violence in both
+  # input and output at HIGH strength. Prompt attack filter on input at
+  # HIGH strength to defend against prompt injection targeting the SNS
+  # email side channel; its output strength must be NONE per the service
+  # contract.
   #
-  # PII policy: ANONYMIZE (not BLOCK) because the agent legitimately
-  # handles customer names, emails, phone numbers, and addresses during
-  # fraud investigation. Credit card numbers are also anonymized so they
-  # do not appear in investigation reports.
+  # No MISCONDUCT filter, deliberately. This is a fraud-investigation
+  # tool: analysts legitimately discuss money laundering, stolen cards
+  # and illegal transfers, so a MISCONDUCT filter is a false-positive
+  # risk that would block the tool's core use case. The trade-off is
+  # recorded in FraudDetectionGuardrailVersion.Description below.
+  #
+  # PII policy: ANONYMIZE (not BLOCK), scoped to credit card numbers
+  # only. Customer names, emails, phone numbers and addresses are
+  # deliberately NOT anonymized, because an investigation report has to
+  # show who the customer is. See PiiEntitiesConfig below.
   # ------------------------------------------------------------------
   FraudDetectionGuardrail:
     Type: AWS::Bedrock::Guardrail
@@ -62,25 +69,15 @@ Resources:
           - Type: VIOLENCE
             InputStrength: HIGH
             OutputStrength: HIGH
-          - Type: MISCONDUCT
-            InputStrength: HIGH
-            OutputStrength: HIGH
           - Type: PROMPT_ATTACK
             InputStrength: HIGH
             # PROMPT_ATTACK output strength must be NONE per service contract.
             OutputStrength: NONE
       SensitiveInformationPolicyConfig:
         PiiEntitiesConfig:
-          - Type: NAME
-            Action: ANONYMIZE
-          - Type: EMAIL
-            Action: ANONYMIZE
-          - Type: PHONE
-            Action: ANONYMIZE
-          - Type: ADDRESS
-            Action: ANONYMIZE
-          - Type: AGE
-            Action: ANONYMIZE
+          # A fraud investigation report must show the customer's identity
+          # (name/email/phone/address), so those are NOT anonymized. Only the
+          # genuinely sensitive card number is masked.
           - Type: CREDIT_DEBIT_CARD_NUMBER
             Action: ANONYMIZE
 
@@ -94,7 +91,10 @@ Resources:
     Type: AWS::Bedrock::GuardrailVersion
     Properties:
       GuardrailIdentifier: !Ref FraudDetectionGuardrail
-      Description: Initial published version for the fraud-detection agent.
+      Description: >-
+        Version 3 - no MISCONDUCT filter: fraud analysts discuss laundering/stolen
+        cards, so it is a false-positive risk. PII anonymize limited to card numbers
+        (fraud report needs customer identity).
 
 Outputs:
   GuardrailId:

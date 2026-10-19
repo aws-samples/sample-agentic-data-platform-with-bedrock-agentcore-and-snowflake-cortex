@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: MIT-0
 """Gateway setup script for the Fraud Detection Agent.
 
-Creates a multi-target AgentCore Gateway with Cognito OAuth auth
-and two targets: Snowflake Cortex Agent and IP Geolocation.
-Web search is handled directly via the Strands Tavily tool.
+Creates a multi-target AgentCore Gateway with Cognito OAuth auth and three
+targets: Snowflake Cortex Agent, IP Geolocation, and Amazon Bedrock AgentCore
+Web Search (managed connector — no external API key; queries stay within AWS).
 
 Usage:
     python create_gateway.py
@@ -117,6 +117,41 @@ def create_fraud_detection_gateway(
         },
     )
 
+    # 4b. Register AgentCore Web Search target (managed MCP connector) and grant
+    # the gateway's outbound role permission to invoke Web Search. This replaces
+    # the former external Tavily tool — no API key, and queries stay within AWS.
+    # NOTE: requires boto3 >= 1.43 (the `connector` target shape) and a region
+    # where AgentCore Web Search is available (e.g. us-east-1).
+    print("Registering Web Search target...")
+    control = boto3.client("bedrock-agentcore-control", region_name=region)
+    gw_id = gateway.get("gatewayId", "")
+    gw_details = control.get_gateway(gatewayIdentifier=gw_id)
+    gw_arn = gw_details["gatewayArn"]
+    role_name = gw_details["roleArn"].split("/")[-1]
+    boto3.client("iam").put_role_policy(
+        RoleName=role_name,
+        PolicyName="WebSearchOutbound",
+        PolicyDocument=json.dumps({
+            "Version": "2012-10-17",
+            "Statement": [
+                {"Sid": "InvokeGateway", "Effect": "Allow",
+                 "Action": "bedrock-agentcore:InvokeGateway", "Resource": gw_arn},
+                {"Sid": "InvokeWebSearch", "Effect": "Allow",
+                 "Action": "bedrock-agentcore:InvokeWebSearch",
+                 "Resource": f"arn:aws:bedrock-agentcore:{region}:aws:tool/web-search.v1"},
+            ],
+        }),
+    )
+    control.create_gateway_target(
+        gatewayIdentifier=gw_id,
+        name="WebSearchTarget",
+        targetConfiguration={"mcp": {"connector": {
+            "source": {"connectorId": "web-search"},
+            "configurations": [{"name": "WebSearch", "parameterValues": {}}],
+        }}},
+        credentialProviderConfigurations=[{"credentialProviderType": "GATEWAY_IAM_ROLE"}],
+    )
+
     # 5. Save settings (no access_token — Cognito refresh handles it at runtime)
     settings = {
         "gateway_id": gateway.get("gatewayId", ""),
@@ -133,6 +168,7 @@ def create_fraud_detection_gateway(
         "targets": {
             "snowflake_cortex": {"tools": ["SnowflakeCortexTarget___runAgent"]},
             "ip_geolocation": {"tools": ["IPGeolocationTarget___lookupIP"]},
+            "web_search": {"tools": ["WebSearchTarget___WebSearch"]},
         },
     }
 

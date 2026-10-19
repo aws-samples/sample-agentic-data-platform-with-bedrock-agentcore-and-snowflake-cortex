@@ -266,4 +266,29 @@ def lookup_ip(ip_address: str) -> dict:
     )
 
 
+_WEBSEARCH_TIMEOUT = int(os.environ.get("WEBSEARCH_TIMEOUT_SECONDS", "30"))
+
+
+@tool
+def web_search(query: str, max_results: int = 5) -> dict:
+    """Search the public web for current information (merchant reputation, fraud reports, news).
+
+    Backed by Amazon Bedrock AgentCore Web Search, exposed through the AgentCore
+    Gateway as an MCP tool. No external API key — queries stay within AWS.
+
+    Args:
+        query: The search query.
+        max_results: Maximum number of results to return (default 5).
+
+    Returns:
+        Web search results; each observation carries title, url, publishedDate, and text.
+    """
+    return call_gateway_tool(
+        _get_gateway_url(),
+        "WebSearchTarget___WebSearch",
+        {"query": query, "maxResults": max_results},
+        timeout=_WEBSEARCH_TIMEOUT,
+    )
+
+
 
